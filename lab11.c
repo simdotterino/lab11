@@ -10,10 +10,10 @@
 #define GRN "\e[0;32m"
 #define CRESET "\e[0m"
 
-#define handle_error(msg)            \
-  do {                               \
-    perror(msg);                     \
-    exit(EXIT_FAILURE);              \
+#define handle_error(msg)                                                      \
+  do {                                                                         \
+    perror(msg);                                                               \
+    exit(EXIT_FAILURE);                                                        \
   } while (0)
 
 size_t read_all_bytes(const char *filename, void *buffer, size_t buffer_size) {
@@ -62,8 +62,16 @@ int main() {
   const char *signature_files[] = {"signature1.sig", "signature2.sig",
                                    "signature3.sig"};
 
-  // TODO: Load the public key using PEM_read_PUBKEY
-  EVP_PKEY *pubkey = NULL;
+  // pem_read_pubkey_ex(file *fp, evp_pkey **x, password *cb, void *u)
+  // but every parameter except the first call be null
+  //
+  FILE *fp = fopen("public_key.pem", "r");
+  if (!fp) {
+    perror("fopen failure");
+    return 1;
+  }
+
+  EVP_PKEY *pubkey = PEM_read_PUBKEY(fp, NULL, NULL, NULL);
 
   // Verify each message
   for (int i = 0; i < 3; i++) {
@@ -100,8 +108,53 @@ int verify(const char *message_path, const char *sign_path, EVP_PKEY *pubkey) {
   unsigned char message[MAX_FILE_SIZE];
   unsigned char signature[MAX_FILE_SIZE];
 
-  // TODO: Check if the message is authentic using the signature.
-  // Look at: https://wiki.openssl.org/index.php/EVP_Signing_and_Verifying
+  // EP_DigestVerifyInit()
+  // EVP_DigestVerifyUpdate()
+  // EVP_DigestVerifyFinal()
+  //  Look at: https://wiki.openssl.org/index.php/EVP_Signing_and_Verifying
+  //
+  FILE *fp = fopen(message_path, "r");
+  if (!fp) {
+    perror("fopen failure");
+    return 1;
+  }
+
+  size_t len = fread(message, 1, MAX_FILE_SIZE, fp);
+
+  FILE *sig = fopen(sign_path, "r");
+  if (!sig) {
+    perror("fopen falure");
+    return 1;
+  }
+  size_t sig_len = fread(signature, 1, MAX_FILE_SIZE, sig);
+
+  EVP_MD_CTX *digest = EVP_MD_CTX_new();
+  if (!digest) {
+    perror("failed to create digest");
+    return 1;
+  }
+
+  if (EVP_DigestVerifyInit(digest, NULL, NULL, NULL, pubkey) <= 0) {
+    perror("digest verify failure");
+    return 1;
+  }
+
+  if (EVP_DigestVerifyUpdate(digest, message, len) <= 0) {
+    perror("digest verify update failure");
+    return 1;
+  }
+
+  int result = EVP_DigestVerifyFinal(digest, signature, sig_len);
+  if (result < 0) {
+    perror("digest verify final failure");
+    return -1;
+  } else if (result == 1) {
+    printf("valid signature");
+    return 1;
+  } else {
+    printf("signature does not match");
+    return 0;
+  }
 
   return -1;
 }
