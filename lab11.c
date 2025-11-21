@@ -68,10 +68,11 @@ int main() {
   FILE *fp = fopen("public_key.pem", "r");
   if (!fp) {
     perror("fopen failure");
-    return 1;
+    return -1;
   }
 
   EVP_PKEY *pubkey = PEM_read_PUBKEY(fp, NULL, NULL, NULL);
+  fclose(fp);
 
   // Verify each message
   for (int i = 0; i < 3; i++) {
@@ -113,35 +114,35 @@ int verify(const char *message_path, const char *sign_path, EVP_PKEY *pubkey) {
   // EVP_DigestVerifyFinal()
   //  Look at: https://wiki.openssl.org/index.php/EVP_Signing_and_Verifying
   //
-  FILE *fp = fopen(message_path, "r");
+  FILE *fp = fopen(message_path, "rb");
   if (!fp) {
     perror("fopen failure");
-    return 1;
+    return -1;
   }
 
   size_t len = fread(message, 1, MAX_FILE_SIZE, fp);
 
-  FILE *sig = fopen(sign_path, "r");
+  FILE *sig = fopen(sign_path, "rb");
   if (!sig) {
     perror("fopen falure");
-    return 1;
+    return -1;
   }
   size_t sig_len = fread(signature, 1, MAX_FILE_SIZE, sig);
 
   EVP_MD_CTX *digest = EVP_MD_CTX_new();
   if (!digest) {
     perror("failed to create digest");
-    return 1;
+    return -1;
   }
 
   if (EVP_DigestVerifyInit(digest, NULL, NULL, NULL, pubkey) <= 0) {
     perror("digest verify failure");
-    return 1;
+    return -1;
   }
 
   if (EVP_DigestVerifyUpdate(digest, message, len) <= 0) {
     perror("digest verify update failure");
-    return 1;
+    return -1;
   }
 
   int result = EVP_DigestVerifyFinal(digest, signature, sig_len);
@@ -155,6 +156,10 @@ int verify(const char *message_path, const char *sign_path, EVP_PKEY *pubkey) {
     printf("signature does not match");
     return 0;
   }
+
+  EVP_MD_CTX_free(digest);
+  fclose(fp);
+  fclose(sig);
 
   return -1;
 }
